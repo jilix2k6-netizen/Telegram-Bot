@@ -3,9 +3,26 @@ import urllib.request
 import json
 import time
 import requests
+from flask import Flask
+from threading import Thread
 
-# သင့် Token နဲ့ Gemini Key
-TG_API = "https://api.telegram.org/bot8215210952:AAFZXpjK3YcrY355QE_uG1g-ZhzYBuRIXkE/"
+# Render က Port ရှာတွေ့အောင် Flask လေးနဲ့ တည်ဆောက်ခြင်း
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run():
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# သင့် Token နဲ့ Gemini Key (Render ရဲ့ Environment Variable ကနေ ယူပါမယ်)
+TG_API = os.environ.get("TG_API")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 def send(chat_id, text):
@@ -22,10 +39,7 @@ def ask_ai(prompt):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
     headers = {'Content-Type': 'application/json'}
     
-    # AI ကို Lix အနေနဲ့ ပြုမူဖို့ ညွှန်ကြားချက် ထည့်ထားပါတယ်
     instruction = "မင်းနာမည်က Lix ပါ။ မင်းက ကူညီပေးတတ်တဲ့ AI သူငယ်ချင်းတစ်ယောက်ပါ။ အသုံးပြုသူက စာပို့လာတိုင်း မင်းရဲ့ အဖြေရဲ့ အစမှာ 'Lix ဘက်ကနေ ဘာများကူညီပေးရမလဲ' ဆိုတဲ့ စကားလေးကို အမြဲထည့်ပြီး ပြန်ဖြေပေးပါ။ ပြီးမှ သူမေးတာကို ဖြေပေးပါ။"
-    
-    # ညွှန်ကြားချက်နဲ့ အသုံးပြုသူရဲ့ စာသားကို ပေါင်းလိုက်ပါတယ်
     full_prompt = f"{instruction}\n\nUser: {prompt}"
 
     data = {"contents": [{"parts": [{"text": full_prompt}]}]}
@@ -40,6 +54,9 @@ def ask_ai(prompt):
             return f"API Error: {result}"
     except Exception as e:
         return f"AI Error: {str(e)}"
+
+# Web Server ကို စတင်ခြင်း
+keep_alive()
 
 offset = 0
 print("GEMINI AI BOT RUNNING!")
