@@ -1,205 +1,521 @@
 import os
-import urllib.request
-import urllib.parse
 import json
 import time
+import urllib.parse
 import requests
+
 from flask import Flask
 from threading import Thread
 
 # ==========================================
-# ၁။ Render အတွက် Web Server အပိုင်း
+# 1. WEB SERVER
 # ==========================================
-app = Flask('')
+
+app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Lix Bot is running!"
+    return "❤️ Lix AI Bot V2.0 is Running!"
 
 def run():
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
 
 def keep_alive():
-    t = Thread(target=run)
-    t.start()
+    Thread(target=run, daemon=True).start()
+
 
 # ==========================================
-# ၂။ Environment Variables ယူခြင်း
+# 2. API SETTINGS
 # ==========================================
-TG_API = os.environ.get("TG_API")
+
+TG_API = os.environ.get("TG_API", "").rstrip("/") + "/"
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+POLLINATIONS_API_KEY = os.environ.get("POLLINATIONS_API_KEY")
+
+IMAGE_MODEL = os.environ.get(
+    "IMAGE_MODEL",
+    "google/gemini-3.1-flash-image"
+)
+
+TEXT_MODEL = "gemini-2.5-flash"
 
 user_last_msg_time = {}
 
+
 # ==========================================
-# ၃။ Telegram ဆိုင်ရာ Function များ
+# 3. TELEGRAM FUNCTIONS
 # ==========================================
+
+def telegram(method, data=None, files=None):
+
+    url = TG_API + method
+
+    try:
+        response = requests.post(
+            url,
+            data=data,
+            files=files,
+            timeout=60
+        )
+
+        result = response.json()
+
+        if not result.get("ok"):
+            print("Telegram Error:", result)
+
+        return result
+
+    except Exception as e:
+        print("Telegram Error:", e)
+        return None
+
+
 def send_message(chat_id, text):
-    url = TG_API + "sendMessage"
-    data = json.dumps({"chat_id": chat_id, "text": text}).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    try:
-        urllib.request.urlopen(req, timeout=10)
-    except Exception as e:
-        print("Send Error:", e)
 
-def send_photo(chat_id, photo_url, caption=""):
-    url = TG_API + "sendPhoto"
-    data = json.dumps({"chat_id": chat_id, "photo": photo_url, "caption": caption}).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    try:
-        urllib.request.urlopen(req, timeout=15)
-    except Exception as e:
-        print("Photo Error:", e)
-        send_message(chat_id, "ပုံပို့လို့ မရဖြစ်သွားပါတယ်။ ခဏနေမှ ပြန်စမ်းပါဦး။")
+    return telegram("sendMessage", {
+        "chat_id": chat_id,
+        "text": text
+    })
 
-def send_audio(chat_id, audio_url, title, performer):
-    url = TG_API + "sendAudio"
-    data = json.dumps({
-        "chat_id": chat_id, 
-        "audio": audio_url, 
-        "title": title, 
-        "performer": performer
-    }).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    try:
-        urllib.request.urlopen(req, timeout=15)
-    except Exception as e:
-        print("Audio Error:", e)
-        send_message(chat_id, "သီချင်းပို့လို့ မရဖြစ်သွားပါတယ်။ ခဏနေမှ ပြန်စမ်းပါဦး။")
 
 def send_typing(chat_id):
-    url = TG_API + "sendChatAction"
-    data = json.dumps({"chat_id": chat_id, "action": "typing"}).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    try:
-        urllib.request.urlopen(req, timeout=10)
-    except Exception:
-        pass
+
+    telegram("sendChatAction", {
+        "chat_id": chat_id,
+        "action": "typing"
+    })
+
 
 # ==========================================
-# ၄။ AI ကို မေးခြင်း (Gemini API)
+# 4. GEMINI AI
 # ==========================================
+
 def ask_ai(prompt):
-    model_name = "gemini-2.0-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
-    headers = {'Content-Type': 'application/json'}
-    
-    instruction = (
-        "မင်းနာမည်က Lix ပါ။ မင်းက ကူညီပေးတတ်တဲ့ AI သူငယ်ချင်းတစ်ယောက်ပါ။ "
-        "အသုံးပြုသူက စာပို့လာတိုင်း မင်းရဲ့ အဖြေရဲ့ အစမှာ 'Lix ဘက်ကနေ ဘာများကူညီပေးရမလဲ' ဆိုတဲ့ စကားလေးကို အမြဲထည့်ပြီး ပြန်ဖြေပေးပါ။ "
-        "မင်းက အသံနဲ့ စကားပြောလို့ မရသေးပါဘူး။ စာသားနဲ့ပဲ ကူညီပေးနိုင်တယ်ဆိုတာကို သိထားပါ။"
+
+    if not GEMINI_API_KEY:
+        return "⚠️ Gemini API Key မရှိသေးပါ။"
+
+    url = (
+        "https://generativelanguage.googleapis.com/"
+        f"v1beta/models/{TEXT_MODEL}:generateContent"
+        f"?key={GEMINI_API_KEY}"
     )
-    full_prompt = f"{instruction}\n\nUser: {prompt}"
-    data = {"contents": [{"parts": [{"text": full_prompt}]}]}
-    
+
+    instruction = """
+မင်းနာမည်က Lix ပါ။
+
+မင်းဟာ ဖော်ရွေပြီး ဉာဏ်ရည်ထက်မြက်တဲ့ AI သူငယ်ချင်းတစ်ယောက်ပါ။
+
+စည်းကမ်းများ -
+
+1. အသုံးပြုသူကို မြန်မာလို သဘာဝကျကျ ပြန်ဖြေပါ။
+2. လိုအပ်ရင် English နဲ့လည်း ဖြေနိုင်ပါတယ်။
+3. အဖြေတိုင်းရဲ့အစမှာ
+'Lix ဘက်ကနေ ဘာများကူညီပေးရမလဲ ❤️'
+ဆိုတဲ့စာသား ထည့်ပါ။
+4. မေးခွန်းကို နားလည်အောင် ကြိုးစားပါ။
+5. အချက်အလက်တွေကို တိကျအောင် ဖြေပါ။
+6. သူငယ်ချင်းတစ်ယောက်လို နွေးထွေးစွာ ပြောဆိုပါ။
+"""
+
+    data = {
+        "contents": [{
+            "parts": [{
+                "text": instruction + "\n\nUser: " + prompt
+            }]
+        }]
+    }
+
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=120)
+
+        response = requests.post(
+            url,
+            json=data,
+            timeout=90
+        )
+
         result = response.json()
-        if 'candidates' in result:
-            return result['candidates'][0]['content']['parts'][0]['text']
-        else:
-            return "⚠️ AI နဲ့ ချိတ်ဆက်ရာမှာ အမှားအယွင်း ဖြစ်သွားပါတယ်။ ခဏနေမှ ပြန်ကြိုးစားပေးပါဦး။"
+
+        if "candidates" in result:
+
+            return result["candidates"][0]["content"]["parts"][0]["text"]
+
+        print("Gemini Error:", result)
+
+        return "⚠️ AI ချိတ်ဆက်မှု အမှားဖြစ်နေပါတယ်။"
+
     except Exception as e:
-        print("Ask AI Error:", str(e))
-        return "⚠️ AI ဖြေဖို့ အချိန်ကြာနေပါတယ်။ ခဏနေမှ ပြန်မေးပေးပါဦး။"
+
+        print("AI Error:", e)
+
+        return "⚠️ AI အလုပ်လုပ်ရာမှာ အခက်အခဲရှိနေပါတယ်။"
+
 
 # ==========================================
-# ၅။ iTunes ကနေ သီချင်းရှာတဲ့ Function
+# 5. ADVANCED IMAGE GENERATOR
 # ==========================================
-def search_song(song_name):
-    query = urllib.parse.quote(song_name)
-    url = f"https://itunes.apple.com/search?term={query}&limit=1&media=music"
+
+def generate_image(prompt):
+
+    encoded_prompt = urllib.parse.quote(prompt)
+
+    url = (
+        f"https://gen.pollinations.ai/image/{encoded_prompt}"
+        f"?model={urllib.parse.quote(IMAGE_MODEL)}"
+        "&width=1024"
+        "&height=1024"
+        "&nologo=true"
+    )
+
+    headers = {}
+
+    if POLLINATIONS_API_KEY:
+
+        headers["Authorization"] = (
+            f"Bearer {POLLINATIONS_API_KEY}"
+        )
+
     try:
-        response = requests.get(url, timeout=10)
+
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=180
+        )
+
+        response.raise_for_status()
+
+        content_type = response.headers.get(
+            "Content-Type", ""
+        )
+
+        if "image/" not in content_type:
+
+            print("Image Error:", response.text[:500])
+            return None
+
+        return response.content
+
+    except Exception as e:
+
+        print("Image Generation Error:", e)
+
+        return None
+
+
+def send_photo(chat_id, image_data, caption):
+
+    try:
+
+        files = {
+            "photo": (
+                "lix_ai_image.jpg",
+                image_data,
+                "image/jpeg"
+            )
+        }
+
+        data = {
+            "chat_id": chat_id,
+            "caption": caption[:1000]
+        }
+
+        result = telegram(
+            "sendPhoto",
+            data=data,
+            files=files
+        )
+
+        return result
+
+    except Exception as e:
+
+        print("Photo Send Error:", e)
+        return None
+
+
+# ==========================================
+# 6. SONG SEARCH
+# ==========================================
+
+def search_song(song_name):
+
+    url = "https://itunes.apple.com/search"
+
+    params = {
+        "term": song_name,
+        "limit": 1,
+        "media": "music",
+        "entity": "song"
+    }
+
+    try:
+
+        response = requests.get(
+            url,
+            params=params,
+            timeout=20
+        )
+
         result = response.json()
-        if result['resultCount'] > 0:
-            track = result['results'][0]
+
+        if result.get("resultCount", 0) > 0:
+
+            track = result["results"][0]
+
             return {
                 "preview_url": track.get("previewUrl"),
                 "title": track.get("trackName"),
-                "artist": track.get("artistName")
+                "artist": track.get("artistName"),
+                "album": track.get("collectionName")
             }
+
     except Exception as e:
+
         print("Song Search Error:", e)
+
     return None
 
+
 # ==========================================
-# ၆။ Main Loop (Bot အလုပ်လုပ်တဲ့ နေရာ)
+# 7. SEND SONG IN ONE MESSAGE
 # ==========================================
+
+def send_audio(chat_id, song):
+
+    try:
+
+        data = {
+            "chat_id": chat_id,
+            "audio": song["preview_url"],
+            "title": song["title"],
+            "performer": song["artist"],
+            "caption": (
+                "🎵 " + song["title"] +
+                "\n🎤 Artist: " + song["artist"] +
+                "\n\n❤️ Sent by Lix AI"
+            )
+        }
+
+        result = telegram("sendAudio", data)
+
+        return result
+
+    except Exception as e:
+
+        print("Audio Error:", e)
+        return None
+
+
+# ==========================================
+# 8. MAIN BOT
+# ==========================================
+
 keep_alive()
+
 offset = 0
-print("LIX GEMINI BOT RUNNING!")
+
+print("❤️ LIX AI BOT V2.0 RUNNING!")
+
 
 while True:
+
     try:
-        url = TG_API + "getUpdates?offset=" + str(offset) + "&timeout=10"
-        response = urllib.request.urlopen(url, timeout=30)
-        updates = json.loads(response.read())["result"]
+
+        response = requests.get(
+            TG_API + "getUpdates",
+            params={
+                "offset": offset,
+                "timeout": 25
+            },
+            timeout=35
+        )
+
+        updates = response.json().get("result", [])
 
         for update in updates:
+
             offset = update["update_id"] + 1
+
             msg = update.get("message", {})
+
             chat_id = msg.get("chat", {}).get("id")
-            text = msg.get("text", "")
+
+            text = msg.get("text", "").strip()
 
             if not chat_id or not text:
                 continue
 
-            # Rate Limit (၃ စက္ကန့်အတွင်း ၂ ခါ မပို့ရအောင်)
+            # RATE LIMIT
+
             current_time = time.time()
+
             if chat_id in user_last_msg_time:
+
                 if current_time - user_last_msg_time[chat_id] < 3:
-                    send_message(chat_id, "⏳ ခဏစောင့်ပြီးမှ ပြန်မေးပေးပါဦး။")
+
+                    send_message(
+                        chat_id,
+                        "⏳ ခဏလေးစောင့်ပြီးမှ ပြန်မေးပေးပါဦး ❤️"
+                    )
+
                     continue
+
             user_last_msg_time[chat_id] = current_time
 
-            # Start Command
+
+            # START COMMAND
+
             if text == "/start":
-                send_message(chat_id, "မင်္ဂလာပါ ❤️ Lixll Ai Bot မှ ကြိုဆိုပါတယ်။\n\nကျွန်တော့်ကို အောက်ပါအတိုင်း အသုံးပြုနိုင်ပါတယ် -\n\n💬 စကားပြောရန် - 'မင်္ဂလာပါ' လို့ ရိုက်ပါ\n🎵 သီချင်းရှာရန် - 'သီချင်း Shape of You' လို့ ရိုက်ပါ\n🎨 ပုံဆွဲရန် - 'ပုံဆွဲပေးပါ ကြောင်လေးတစ်ကောင်' လို့ ရိုက်ပါ")
+
+                send_message(
+                    chat_id,
+                    """
+❤️ မင်္ဂလာပါ။ Lix AI Bot မှ ကြိုဆိုပါတယ်။
+
+ကျွန်တော်က Lix ပါ။
+
+အသုံးပြုနိုင်တဲ့ Features များ -
+
+💬 AI စကားပြောရန်
+စာတစ်ခုခု ရိုက်ပို့လိုက်ပါ။
+
+🎵 သီချင်းရှာရန်
+သီချင်း Shape of You
+
+🎨 AI ပုံဆွဲရန်
+ပုံဆွဲပေးပါ ကြောင်လေးတစ်ကောင်
+
+❤️ Lix AI V2.0
+"""
+                )
+
                 continue
 
-            # ပုံဆွဲခိုင်းတဲ့အခါ (Flux AI)
-            if "ပုံဆွဲ" in text.lower() or "draw" in text.lower() or "image" in text.lower():
+
+            # IMAGE GENERATION
+
+            if (
+                "ပုံဆွဲ" in text.lower()
+                or "draw" in text.lower()
+                or "image" in text.lower()
+            ):
+
                 send_typing(chat_id)
-                prompt = text.replace("ပုံဆွဲပေးပါ", "").replace("ပုံဆွဲ", "").replace("draw", "").replace("image", "").strip()
-                
+
+                prompt = text
+
+                for word in [
+                    "ပုံဆွဲပေးပါ",
+                    "ပုံဆွဲ",
+                    "draw",
+                    "image"
+                ]:
+
+                    prompt = prompt.replace(word, "")
+
+                prompt = prompt.strip()
+
                 if not prompt:
-                    send_message(chat_id, "ဘယ်လိုပုံမျိုး ဆွဲပေးရမလဲဆိုတာ ပြောပြပါဦး။ (ဥပမာ - ပုံဆွဲပေးပါ နေဝင်ချိန် ကမ်းခြေ)")
+
+                    send_message(
+                        chat_id,
+                        "🎨 ဘယ်လိုပုံမျိုး ဆွဲပေးရမလဲ ပြောပြပါဦး။"
+                    )
+
                     continue
-                
-                encoded_prompt = urllib.parse.quote(prompt)
-                image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&model=flux&nologo=true&enhance=true"
-                send_photo(chat_id, image_url, f"🎨 Lix ရဲ့ Flux AI နဲ့ ဆွဲပေးထားတဲ့ ပုံလေးပါ - \n'{prompt}'")
+
+                send_message(
+                    chat_id,
+                    "🎨 Lix AI က ပုံဖန်တီးနေပါတယ်။ ခဏစောင့်ပေးပါဦး ❤️"
+                )
+
+                image_data = generate_image(prompt)
+
+                if image_data:
+
+                    send_photo(
+                        chat_id,
+                        image_data,
+                        "🎨 Lix AI Image Generator\n\n" + prompt
+                    )
+
+                else:
+
+                    send_message(
+                        chat_id,
+                        "⚠️ ပုံဆွဲရာမှာ အမှားဖြစ်သွားပါတယ်။ API Key နဲ့ Model ကို ပြန်စစ်ပေးပါ။"
+                    )
+
                 continue
 
-            # သီချင်းရှာခိုင်းတဲ့အခါ (iTunes Audio)
-            if "သီချင်း" in text.lower() or "song" in text.lower() or "music" in text.lower():
+
+            # SONG SEARCH
+
+            if (
+                "သီချင်း" in text.lower()
+                or "song" in text.lower()
+                or "music" in text.lower()
+            ):
+
                 send_typing(chat_id)
-                song_query = text.replace("သီချင်း", "").replace("ရှာပေးပါ", "").replace("song", "").replace("music", "").strip()
-                
+
+                song_query = text
+
+                for word in [
+                    "သီချင်း",
+                    "ရှာပေးပါ",
+                    "ရှာပေး",
+                    "song",
+                    "music"
+                ]:
+
+                    song_query = song_query.replace(word, "")
+
+                song_query = song_query.strip()
+
                 if not song_query:
-                    send_message(chat_id, "ဘယ်သီချင်းမျိုး ရှာပေးရမလဲဆိုတာ ပြောပြပါဦး။ (ဥပမာ - သီချင်း Believer)")
+
+                    send_message(
+                        chat_id,
+                        "🎵 ဘယ်သီချင်းရှာပေးရမလဲ ပြောပြပါဦး။"
+                    )
+
                     continue
 
                 song_data = search_song(song_query)
-                
-                if song_data and song_data['preview_url']:
-                    send_audio(chat_id, song_data['preview_url'], song_data['title'], song_data['artist'])
-                    send_message(chat_id, "🎵 အပေါ်က သီချင်းလေးက ၃၀ စက္ကန့်စာ နားဆင်နိုင်တဲ့ အပိုင်းလေးပါ။")
+
+                if song_data and song_data["preview_url"]:
+
+                    send_audio(chat_id, song_data)
+
                 else:
-                    send_message(chat_id, f"'{song_query}' ဆိုတဲ့ သီချင်းကို ရှာမတွေ့ပါဘူး။ နာမည် ပြန်စစ်ပြီး ရှာကြည့်ပါဦး။")
+
+                    send_message(
+                        chat_id,
+                        "😔 သီချင်းရှာမတွေ့ပါဘူး။ နာမည်ပြန်စစ်ပေးပါဦး။"
+                    )
+
                 continue
 
-            # ကျန်တဲ့ ရိုးရိုးစာသားတွေအတွက် AI ကို မေးမယ်
-            try:
-                send_typing(chat_id)
-                answer = ask_ai(text)
-                send_message(chat_id, answer[:4000])
-            except Exception as e:
-                send_message(chat_id, "System Error: " + str(e)[:300])
+
+            # NORMAL AI CHAT
+
+            send_typing(chat_id)
+
+            answer = ask_ai(text)
+
+            send_message(
+                chat_id,
+                answer[:4000]
+            )
+
 
     except Exception as e:
-        print("Loop Error:", str(e))
+
+        print("Main Loop Error:", str(e))
+
         time.sleep(5)
