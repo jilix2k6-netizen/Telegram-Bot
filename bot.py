@@ -5,7 +5,7 @@ import requests
 
 # သင့် Token နဲ့ Gemini Key
 TG_API = "https://api.telegram.org/bot8215210952:AAFZXpjK3YcrY355QE_uG1g-ZhzYBuRIXkE/"
-GEMINI_API_KEY = "AQ.Ab8RN6KgPxBwIlvkQw4D5JJiEgtNPzJQM-ERZvOxyBfd0R2_pg"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 def send(chat_id, text):
     url = TG_API + "sendMessage"
