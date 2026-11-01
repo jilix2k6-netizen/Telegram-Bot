@@ -21,9 +21,12 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# သင့် Token နဲ့ Gemini Key (Render ရဲ့ Environment Variable ကနေ ယူပါမယ်)
+# Environment Variables ကနေ ယူခြင်း
 TG_API = os.environ.get("TG_API")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+# Rate Limit အတွက် အသုံးပြုသူရဲ့ နောက်ဆုံးစာပို့ချိန်ကို မှတ်ထားမယ့် နေရာ
+user_last_msg_time = {}
 
 def send(chat_id, text):
     url = TG_API + "sendMessage"
@@ -48,14 +51,25 @@ def ask_ai(prompt):
         response = requests.post(url, headers=headers, json=data, timeout=60)
         result = response.json()
         
+        # API Error တွေကို စနစ်တကျ ဖမ်းယူခြင်း
         if 'candidates' in result:
             return result['candidates'][0]['content']['parts'][0]['text']
+        elif 'error' in result:
+            error_msg = result['error'].get('message', '')
+            if 'quota' in error_msg.lower() or '429' in str(result):
+                return "⚠️ တစ်နေ့တာ အသုံးပြုခွင့် ပမာဏ ပြည့်သွားပါပြီ။ ခဏနေမှ ပြန်မေးပေးပါဦး။"
+            elif 'safety' in error_msg.lower():
+                return "⚠️ ဒီစာသားလေးကို AI က ဖြေဖို့ မသင့်လျော်ဘူးလို့ သတ်မှတ်ထားလို့ မဖြေပေးနိုင်ပါဘူး။ တခြားစာသားနဲ့ မေးကြည့်ပါဦး။"
+            else:
+                return "⚠️ AI နဲ့ ချိတ်ဆက်ရာမှာ အမှားအယွင်း ဖြစ်သွားပါတယ်။ ခဏနေမှ ပြန်ကြိုးစားပေးပါဦး။"
         else:
-            return f"API Error: {result}"
+            return "⚠️ AI ဆီကနေ မမျှော်လင့်ထားတဲ့ အဖြေ ပြန်လာပါတယ်။ ခဏနေမှ ပြန်မေးပေးပါဦး။"
+            
     except Exception as e:
-        return f"AI Error: {str(e)}"
+        print("Ask AI Error:", str(e))
+        return "⚠️ AI နဲ့ ချိတ်ဆက်လို့ မရဖြစ်နေပါတယ်။ ခဏနေမှ ပြန်မေးပေးပါဦး။"
 
-# Web Server ကို စတင်ခြင်း (ဒါက အရေးကြီးဆုံးပါ)
+# Web Server ကို စတင်ခြင်း
 keep_alive()
 
 offset = 0
@@ -79,6 +93,17 @@ while True:
             if text == "/start":
                 send(chat_id, "မင်္ဂလာပါ ❤️ Lixll Ai Bot မှ ကြိုဆိုပါတယ်။")
             else:
+                # Rate Limit စစ်ဆေးခြင်း (၃ စက္ကန့်အတွင်း စာနှစ်ခုပို့ရင် ပိတ်မယ်)
+                current_time = time.time()
+                if chat_id in user_last_msg_time:
+                    time_diff = current_time - user_last_msg_time[chat_id]
+                    if time_diff < 3:
+                        send(chat_id, "⏳ ခဏစောင့်ပြီးမှ ပြန်မေးပေးပါဦး။ စာပို့တာ မြန်လွန်းနေပါတယ်။")
+                        continue
+                
+                # အချိန်ကို Update လုပ်မယ်
+                user_last_msg_time[chat_id] = current_time
+
                 try:
                     answer = ask_ai(text)
                     send(chat_id, answer[:4000])
