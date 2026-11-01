@@ -21,21 +21,43 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# Environment Variables ကနေ ယူခြင်း
 TG_API = os.environ.get("TG_API")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Rate Limit အတွက် အသုံးပြုသူရဲ့ နောက်ဆုံးစာပို့ချိန်ကို မှတ်ထားမယ့် နေရာ
 user_last_msg_time = {}
 
-def send(chat_id, text):
+# စာပို့ပြီး Message ID ကို ပြန်ယူတဲ့ Function (ဖျက်ဖို့အတွက်)
+def send_and_get_id(chat_id, text):
     url = TG_API + "sendMessage"
     data = json.dumps({"chat_id": chat_id, "text": text}).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     try:
-        urllib.request.urlopen(req, timeout=10)
+        response = urllib.request.urlopen(req, timeout=10)
+        result = json.loads(response.read())
+        return result['result']['message_id']
     except Exception as e:
         print("Send Error:", e)
+        return None
+
+# စာဖျက်တဲ့ Function
+def delete_message(chat_id, message_id):
+    url = TG_API + "deleteMessage"
+    data = json.dumps({"chat_id": chat_id, "message_id": message_id}).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        print("Delete Error:", e)
+
+# "Typing..." ပြတဲ့ Function (ပိုပြီး သဘာဝကျပါတယ်)
+def send_typing(chat_id):
+    url = TG_API + "sendChatAction"
+    data = json.dumps({"chat_id": chat_id, "action": "typing"}).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        pass # Error တက်ရင် ဘာမှမလုပ်ဘဲ ဆက်သွားမယ်
 
 def ask_ai(prompt):
     model_name = "gemini-3.6-flash"
@@ -51,27 +73,18 @@ def ask_ai(prompt):
         response = requests.post(url, headers=headers, json=data, timeout=60)
         result = response.json()
         
-        # API Error တွေကို စနစ်တကျ ဖမ်းယူခြင်း
         if 'candidates' in result:
             return result['candidates'][0]['content']['parts'][0]['text']
         elif 'error' in result:
-            error_msg = result['error'].get('message', '')
-            if 'quota' in error_msg.lower() or '429' in str(result):
-                return "⚠️ တစ်နေ့တာ အသုံးပြုခွင့် ပမာဏ ပြည့်သွားပါပြီ။ ခဏနေမှ ပြန်မေးပေးပါဦး။"
-            elif 'safety' in error_msg.lower():
-                return "⚠️ ဒီစာသားလေးကို AI က ဖြေဖို့ မသင့်လျော်ဘူးလို့ သတ်မှတ်ထားလို့ မဖြေပေးနိုင်ပါဘူး။ တခြားစာသားနဲ့ မေးကြည့်ပါဦး။"
-            else:
-                return "⚠️ AI နဲ့ ချိတ်ဆက်ရာမှာ အမှားအယွင်း ဖြစ်သွားပါတယ်။ ခဏနေမှ ပြန်ကြိုးစားပေးပါဦး။"
+            return "⚠️ AI နဲ့ ချိတ်ဆက်ရာမှာ အမှားအယွင်း ဖြစ်သွားပါတယ်။ ခဏနေမှ ပြန်ကြိုးစားပေးပါဦး။"
         else:
-            return "⚠️ AI ဆီကနေ မမျှော်လင့်ထားတဲ့ အဖြေ ပြန်လာပါတယ်။ ခဏနေမှ ပြန်မေးပေးပါဦး။"
+            return "⚠️ AI ဆီကနေ မမျှော်လင့်ထားတဲ့ အဖြေ ပြန်လာပါတယ်။"
             
     except Exception as e:
         print("Ask AI Error:", str(e))
         return "⚠️ AI နဲ့ ချိတ်ဆက်လို့ မရဖြစ်နေပါတယ်။ ခဏနေမှ ပြန်မေးပေးပါဦး။"
 
-# Web Server ကို စတင်ခြင်း
 keep_alive()
-
 offset = 0
 print("GEMINI AI BOT RUNNING!")
 
@@ -91,24 +104,37 @@ while True:
                 continue
 
             if text == "/start":
-                send(chat_id, "မင်္ဂလာပါ ❤️ Lixll Ai Bot မှ ကြိုဆိုပါတယ်။")
+                send_and_get_id(chat_id, "မင်္ဂလာပါ ❤️ Lixll Ai Bot မှ ကြိုဆိုပါတယ်။")
             else:
-                # Rate Limit စစ်ဆေးခြင်း (၃ စက္ကန့်အတွင်း စာနှစ်ခုပို့ရင် ပိတ်မယ်)
+                # Rate Limit စစ်ဆေးခြင်း
                 current_time = time.time()
                 if chat_id in user_last_msg_time:
                     time_diff = current_time - user_last_msg_time[chat_id]
                     if time_diff < 3:
-                        send(chat_id, "⏳ ခဏစောင့်ပြီးမှ ပြန်မေးပေးပါဦး။ စာပို့တာ မြန်လွန်းနေပါတယ်။")
+                        send_and_get_id(chat_id, "⏳ ခဏစောင့်ပြီးမှ ပြန်မေးပေးပါဦး။ စာပို့တာ မြန်လွန်းနေပါတယ်။")
                         continue
                 
-                # အချိန်ကို Update လုပ်မယ်
                 user_last_msg_time[chat_id] = current_time
 
                 try:
+                    # ၁။ "Typing..." လေး အရင်ပြမယ်
+                    send_typing(chat_id)
+                    
+                    # ၂။ သင်တောင်းဆိုတဲ့အတိုင်း ⏳ စာလေး အရင်ပို့ပြီး ID ကို မှတ်ထားမယ်
+                    wait_msg_id = send_and_get_id(chat_id, "⏳ ခဏစောင့်ပေးပါဦး၊ Lix စဉ်းစားနေပါတယ်...")
+                    
+                    # ၃။ AI ကို ခေါ်မယ်
                     answer = ask_ai(text)
-                    send(chat_id, answer[:4000])
+                    
+                    # ၄။ ⏳ စာလေးကို ဖျက်မယ်
+                    if wait_msg_id:
+                        delete_message(chat_id, wait_msg_id)
+                        
+                    # ၅။ အဖြေတကယ်ကို ပို့မယ်
+                    send_and_get_id(chat_id, answer[:4000])
+                    
                 except Exception as e:
-                    send(chat_id, "AI Error: " + str(e)[:300])
+                    send_and_get_id(chat_id, "AI Error: " + str(e)[:300])
 
     except Exception as e:
         print("Error:", str(e))
