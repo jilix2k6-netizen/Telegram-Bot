@@ -55,7 +55,7 @@ def ask_ai(prompt):
     except Exception as e:
         return f"AI Error: {str(e)}"
 
-# Web Server ကို စတင်ခြင်း
+# Web Server ကို စတင်ခြင်း (ဒါက အရေးကြီးဆုံးပါ)
 keep_alive()
 
 offset = 0
