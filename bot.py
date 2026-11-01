@@ -69,7 +69,7 @@ def send_typing(chat_id):
 # ==========================================
 def ask_ai(prompt):
     # သင့် API Key နဲ့ ကိုက်ညီမယ့် Model ကို သုံးထားပါတယ်
-    model_name = "gemini-1.5-flash" 
+    model_name = "gemini-flash-latest" 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
     headers = {'Content-Type': 'application/json'}
     
