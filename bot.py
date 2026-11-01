@@ -60,7 +60,7 @@ def send_typing(chat_id):
         pass # Error တက်ရင် ဘာမှမလုပ်ဘဲ ဆက်သွားမယ်
 
 def ask_ai(prompt):
-    model_name = "gemini-3.6-flash"
+    model_name = "gemini-1.5-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
     headers = {'Content-Type': 'application/json'}
     
