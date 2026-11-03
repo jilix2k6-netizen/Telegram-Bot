@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "❤️ Lix AI V3.1 is Running Smoothly!"
+    return "❤️ Lix AI V3.3 is Running Smoothly!"
 
 def run():
     port = int(os.environ.get("PORT", 8080))
@@ -25,15 +25,19 @@ def keep_alive():
     Thread(target=run, daemon=True).start()
 
 # ==========================================
-# 2. API CONFIGURATION
+# 2. API CONFIGURATION (Environment Variables)
 # ==========================================
 
-TG_API = os.environ.get("TG_API", "").rstrip("/") + "/"
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+# Render Dashboard ထဲရှိ Environment Variables များမှ အလိုအလျောက် ယူပါမည်
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}/" if BOT_TOKEN else ""
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 POLLINATIONS_API_KEY = os.environ.get("POLLINATIONS_API_KEY", "")
 
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
-IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "flux")
+# Gemini Model ကို latest / flash သို့ ပြောင်းထားပါသည်
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+IMAGE_MODEL = "flux"
 
 user_last_msg_time = {}
 
@@ -42,8 +46,8 @@ user_last_msg_time = {}
 # ==========================================
 
 def telegram(method, data=None, files=None):
-    if not TG_API.strip("/"):
-        print("TELEGRAM ERROR: TG_API is missing.")
+    if not TG_API:
+        print("TELEGRAM ERROR: BOT_TOKEN is missing in Environment Variables.")
         return None
 
     try:
@@ -72,7 +76,7 @@ def send_typing(chat_id):
 
 def ask_ai(prompt):
     if not GEMINI_API_KEY:
-        return "⚠️ Gemini API Key မရှိသေးပါ။ Render Environment မှာ GEMINI_API_KEY ထည့်ပေးပါ။"
+        return "⚠️ Gemini API Key မရှိပါ။ Render Environment တွင် GEMINI_API_KEY ကို ထည့်ပေးပါ။"
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     headers = {"Content-Type": "application/json"}
@@ -95,7 +99,7 @@ def ask_ai(prompt):
         response = requests.post(url, headers=headers, params=params, json=data, timeout=120)
         if response.status_code != 200:
             print("GEMINI HTTP ERROR:", response.text)
-            return "⚠️ AI ဆာဗာ ချိတ်ဆက်ရာတွင် အမှားဖြစ်နေပါသည်။"
+            return f"⚠️ AI ဆာဗာ ချိတ်ဆက်ရာတွင် အမှားဖြစ်နေပါသည်။ (Error: {response.status_code})"
 
         result = response.json()
         if "candidates" in result and len(result["candidates"]) > 0:
@@ -219,12 +223,12 @@ def clean_image_prompt(text):
 # ==========================================
 
 def main():
-    if not TG_API.strip("/"):
-        print("ERROR: TG_API NOT FOUND")
+    if not BOT_TOKEN:
+        print("ERROR: BOT_TOKEN Environment Variable is missing!")
         return
 
     offset = 0
-    print("❤️ LIX AI V3.1 STARTED SUCCESSFULLY!")
+    print("❤️ LIX AI V3.3 STARTED SUCCESSFULLY!")
 
     while True:
         try:
@@ -261,7 +265,7 @@ def main():
 
                 # Start
                 if text == "/start":
-                    send_message(chat_id, "❤️ မင်္ဂလာပါ။ Lix AI V3.1 မှ ကြိုဆိုပါတယ်။ ပုံဆွဲရန်၊ သီချင်းရှာရန်နှင့် စကားပြောရန် အသင့်ဖြစ်နေပါပြီ။")
+                    send_message(chat_id, "❤️ မင်္ဂလာပါ။ Lix AI V3.3 မှ ကြိုဆိုပါတယ်။ ပုံဆွဲရန်၊ သီချင်းရှာရန်နှင့် စကားပြောရန် အသင့်ဖြစ်နေပါပြီ။")
                     continue
 
                 # Image Generation
