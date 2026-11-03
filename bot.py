@@ -7,7 +7,6 @@ import urllib.parse
 from flask import Flask
 from threading import Thread
 
-
 # ==========================================
 # 1. LIX AI WEB SERVER
 # ==========================================
@@ -16,17 +15,14 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "❤️ Lix AI V3.0 is Running Smoothly!"
-
+    return "❤️ Lix AI V3.1 is Running Smoothly!"
 
 def run():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
-
 def keep_alive():
     Thread(target=run, daemon=True).start()
-
 
 # ==========================================
 # 2. API CONFIGURATION
@@ -34,20 +30,12 @@ def keep_alive():
 
 TG_API = os.environ.get("TG_API", "").rstrip("/") + "/"
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-POLLINATIONS_API_KEY = os.environ.get("POLLINATIONS_API_KEY")
+POLLINATIONS_API_KEY = os.environ.get("POLLINATIONS_API_KEY", "")
 
-GEMINI_MODEL = os.environ.get(
-    "GEMINI_MODEL",
-    "gemini-1.5-flash"
-)
-
-IMAGE_MODEL = os.environ.get(
-    "IMAGE_MODEL",
-    "google/gemini-3.1-flash-image"
-)
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "flux")
 
 user_last_msg_time = {}
-
 
 # ==========================================
 # 3. TELEGRAM API
@@ -59,48 +47,24 @@ def telegram(method, data=None, files=None):
         return None
 
     try:
-        response = requests.post(
-            TG_API + method,
-            data=data,
-            files=files,
-            timeout=90
-        )
-        
+        response = requests.post(TG_API + method, data=data, files=files, timeout=90)
         if response.status_code != 200:
             print(f"TELEGRAM HTTP ERROR {response.status_code}:", response.text)
             return None
 
         result = response.json()
-
         if not result.get("ok"):
             print("TELEGRAM ERROR:", result)
-
         return result
-
     except Exception as e:
         print("TELEGRAM EXCEPTION:", repr(e))
         return None
 
-
 def send_message(chat_id, text):
-    return telegram(
-        "sendMessage",
-        {
-            "chat_id": chat_id,
-            "text": text
-        }
-    )
-
+    return telegram("sendMessage", {"chat_id": chat_id, "text": text})
 
 def send_typing(chat_id):
-    telegram(
-        "sendChatAction",
-        {
-            "chat_id": chat_id,
-            "action": "typing"
-        }
-    )
-
+    telegram("sendChatAction", {"chat_id": chat_id, "action": "typing"})
 
 # ==========================================
 # 4. GEMINI AI CHAT
@@ -108,139 +72,80 @@ def send_typing(chat_id):
 
 def ask_ai(prompt):
     if not GEMINI_API_KEY:
-        return "⚠️ Gemini API Key မရှိသေးပါ။"
+        return "⚠️ Gemini API Key မရှိသေးပါ။ Render Environment မှာ GEMINI_API_KEY ထည့်ပေးပါ။"
 
-    url = (
-        "https://generativelanguage.googleapis.com/"
-        f"v1beta/models/{GEMINI_MODEL}:generateContent"
-    )
-
-    headers = {
-        "Content-Type": "application/json"
-    }
-
-    params = {
-        "key": GEMINI_API_KEY
-    }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    headers = {"Content-Type": "application/json"}
+    params = {"key": GEMINI_API_KEY}
 
     instruction = """
-မင်းနာမည်က Lix ပါ။
-မင်းဟာ ဉာဏ်ရည်ထက်မြက်ပြီး ဖော်ရွေတဲ့ AI သူငယ်ချင်းတစ်ယောက်ပါ။
-
+မင်းနာမည်က Lix ပါ။ မင်းဟာ ဉာဏ်ရည်ထက်မြက်ပြီး ဖော်ရွေတဲ့ AI သူငယ်ချင်းတစ်ယောက်ပါ။
 စည်းကမ်းများ -
 1. မြန်မာလို သဘာဝကျကျ ပြောဆိုပါ။
-2. အသုံးပြုသူရဲ့ မေးခွန်းကို သေချာနားလည်ပါ။
-3. တိကျတဲ့ အချက်အလက်တွေပေးပါ။
-4. လိုအပ်ရင် English နဲ့လည်း ဖြေပါ။
-5. သူငယ်ချင်းတစ်ယောက်လို နွေးထွေးစွာ ပြောဆိုပါ။
-6. အဖြေတိုင်းရဲ့အစမှာ
-'Lix ဘက်ကနေ ဘာများကူညီပေးရမလဲ ❤️'
-ဆိုတဲ့စာသား ထည့်ပါ။
+2. အသုံးပြုသူရဲ့ မေးခွန်းကို တိကျစွာ ဖြေပါ။
+3. သူငယ်ချင်းလို နွေးထွေးစွာ ပြောဆိုပါ။
+4. အဖြေတိုင်းရဲ့အစမှာ 'Lix ဘက်ကနေ ဘာများကူညီပေးရမလဲ ❤️' ဆိုတဲ့စာသား ထည့်ပါ။
 """
 
     data = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": instruction + "\n\nUser: " + prompt
-                    }
-                ]
-            }
-        ]
+        "contents": [{"parts": [{"text": instruction + "\n\nUser: " + prompt}]}]
     }
 
     try:
-        response = requests.post(
-            url,
-            headers=headers,
-            params=params,
-            json=data,
-            timeout=120
-        )
-
+        response = requests.post(url, headers=headers, params=params, json=data, timeout=120)
         if response.status_code != 200:
             print("GEMINI HTTP ERROR:", response.text)
             return "⚠️ AI ဆာဗာ ချိတ်ဆက်ရာတွင် အမှားဖြစ်နေပါသည်။"
 
         result = response.json()
-
         if "candidates" in result and len(result["candidates"]) > 0:
             parts = result["candidates"][0]["content"]["parts"]
             answer = "".join(p.get("text", "") for p in parts)
             if answer:
                 return answer
 
-        print("GEMINI ERROR:", result)
         return "⚠️ AI အဖြေထုတ်ရာမှာ အမှားဖြစ်နေပါတယ်။"
-
     except Exception as e:
         print("GEMINI EXCEPTION:", repr(e))
         return "⚠️ AI ချိတ်ဆက်မှု မအောင်မြင်ပါ။"
 
-
 # ==========================================
-# 5. ADVANCED AI IMAGE GENERATOR
+# 5. ADVANCED AI IMAGE GENERATOR (Pollinations)
 # ==========================================
 
 def generate_image(prompt):
-    if not POLLINATIONS_API_KEY:
-        return None, "Pollinations API Key မရှိပါ။"
-
-    models = [
-        IMAGE_MODEL,
-        "google/gemini-3.1-flash-image",
-        "black-forest-labs/flux.1-schnell"
-    ]
-
+    models = [IMAGE_MODEL, "flux", "flux-realism", "any-dark"]
     models = list(dict.fromkeys(models))
 
-    headers = {
-        "Authorization": f"Bearer {POLLINATIONS_API_KEY}"
-    }
+    headers = {}
+    if POLLINATIONS_API_KEY:
+        headers["Authorization"] = f"Bearer {POLLINATIONS_API_KEY}"
 
     last_error = "Unknown Error"
 
     for model in models:
         try:
-            print("IMAGE MODEL:", model)
-
-            url = (
-                "https://gen.pollinations.ai/image/"
-                + urllib.parse.quote(prompt, safe="")
-            )
-
+            encoded_prompt = urllib.parse.quote(prompt, safe="")
+            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
             params = {
                 "model": model,
                 "width": 1024,
                 "height": 1024,
-                "nologo": "true"
+                "nologo": "true",
+                "private": "true"
             }
 
-            response = requests.get(
-                url,
-                headers=headers,
-                params=params,
-                timeout=240
-            )
-
+            response = requests.get(url, headers=headers, params=params, timeout=180)
             content_type = response.headers.get("Content-Type", "")
 
-            print("IMAGE STATUS:", response.status_code)
-            print("IMAGE TYPE:", content_type)
+            if response.status_code == 200 and ("image" in content_type or len(response.content) > 5000):
+                return response.content, "image/jpeg"
 
-            if response.status_code == 200 and content_type.startswith("image/"):
-                print("IMAGE SUCCESS:", model)
-                return response.content, content_type
-
-            last_error = f"Model: {model}\nStatus: {response.status_code}\nError: {response.text[:700]}"
-
+            last_error = f"Model: {model}, Status: {response.status_code}"
         except Exception as e:
             last_error = repr(e)
-            print("IMAGE EXCEPTION:", last_error)
 
     return None, last_error
-
 
 # ==========================================
 # 6. SEND IMAGE TO TELEGRAM
@@ -248,35 +153,13 @@ def generate_image(prompt):
 
 def send_photo(chat_id, image_data, content_type, caption):
     try:
-        extension = "png"
-        if "jpeg" in content_type or "jpg" in content_type:
-            extension = "jpg"
-
-        files = {
-            "photo": (
-                f"lix_image.{extension}",
-                image_data,
-                content_type
-            )
-        }
-
-        data = {
-            "chat_id": chat_id,
-            "caption": caption[:1000]
-        }
-
-        result = telegram(
-            "sendPhoto",
-            data=data,
-            files=files
-        )
-
+        files = {"photo": ("lix_image.jpg", image_data, content_type)}
+        data = {"chat_id": chat_id, "caption": caption[:1000]}
+        result = telegram("sendPhoto", data=data, files=files)
         return bool(result and result.get("ok"))
-
     except Exception as e:
         print("PHOTO ERROR:", repr(e))
         return False
-
 
 # ==========================================
 # 7. ITUNES SONG SEARCH
@@ -284,26 +167,12 @@ def send_photo(chat_id, image_data, content_type, caption):
 
 def search_song(song_name):
     url = "https://itunes.apple.com/search"
-
-    params = {
-        "term": song_name,
-        "limit": 1,
-        "media": "music",
-        "entity": "song"
-    }
-
+    params = {"term": song_name, "limit": 1, "media": "music", "entity": "song"}
     try:
-        response = requests.get(
-            url,
-            params=params,
-            timeout=20
-        )
-
+        response = requests.get(url, params=params, timeout=20)
         if response.status_code != 200:
             return None
-
         result = response.json()
-
         if result.get("resultCount", 0) > 0:
             track = result["results"][0]
             return {
@@ -312,16 +181,9 @@ def search_song(song_name):
                 "preview": track.get("previewUrl"),
                 "album": track.get("collectionName")
             }
-
     except Exception as e:
         print("SONG SEARCH ERROR:", repr(e))
-
     return None
-
-
-# ==========================================
-# 8. SEND SONG IN ONE MESSAGE
-# ==========================================
 
 def send_audio(chat_id, song):
     try:
@@ -330,53 +192,30 @@ def send_audio(chat_id, song):
             "audio": song["preview"],
             "title": song["title"],
             "performer": song["artist"],
-            "caption": (
-                "🎵 " + song["title"] +
-                "\n🎤 " + song["artist"] +
-                "\n\n❤️ Lix AI Music"
-            )
+            "caption": f"🎵 {song['title']}\n🎤 {song['artist']}\n\n❤️ Lix AI Music"
         }
-
-        result = telegram(
-            "sendAudio",
-            data=data
-        )
-
+        result = telegram("sendAudio", data=data)
         return bool(result and result.get("ok"))
-
     except Exception as e:
         print("AUDIO ERROR:", repr(e))
         return False
 
-
 # ==========================================
-# 9. TEXT COMMAND CLEANER
+# 8. TEXT CLEANERS
 # ==========================================
 
 def clean_song_name(text):
-    words = [
-        "သီချင်း", "ရှာပေးပါ", "ရှာပေး", "ရှာပေးပါဦး",
-        "song", "music", "search"
-    ]
-    result = text
-    for word in words:
-        result = result.replace(word, "")
-    return result.strip()
-
+    for w in ["သီချင်း", "ရှာပေးပါ", "ရှာပေး", "ရှာပေးပါဦး", "song", "music", "search"]:
+        text = text.replace(w, "")
+    return text.strip()
 
 def clean_image_prompt(text):
-    words = [
-        "ပုံဆွဲပေးပါ", "ပုံဆွဲပေး", "ပုံဆွဲ",
-        "draw", "image", "generate"
-    ]
-    result = text
-    for word in words:
-        result = result.replace(word, "")
-    return result.strip()
-
+    for w in ["ပုံဆွဲပေးပါ", "ပုံဆွဲပေး", "ပုံဆွဲ", "draw", "image", "generate"]:
+        text = text.replace(w, "")
+    return text.strip()
 
 # ==========================================
-# 10. MAIN BOT SYSTEM
+# 9. MAIN BOT SYSTEM
 # ==========================================
 
 def main():
@@ -385,36 +224,26 @@ def main():
         return
 
     offset = 0
-    print("❤️ LIX AI V3.0 STARTED SUCCESSFULLY!")
+    print("❤️ LIX AI V3.1 STARTED SUCCESSFULLY!")
 
     while True:
         try:
             response = requests.get(
                 TG_API + "getUpdates",
-                params={
-                    "offset": offset,
-                    "timeout": 25,
-                    "allowed_updates": json.dumps(["message"])
-                },
+                params={"offset": offset, "timeout": 25, "allowed_updates": json.dumps(["message"])},
                 timeout=35
             )
-
             if response.status_code != 200:
                 time.sleep(5)
                 continue
 
             result = response.json()
-
             if not result.get("ok"):
-                print("GET UPDATES ERROR:", result)
                 time.sleep(5)
                 continue
 
-            updates = result.get("result", [])
-
-            for update in updates:
+            for update in result.get("result", []):
                 offset = update["update_id"] + 1
-
                 msg = update.get("message", {})
                 chat_id = msg.get("chat", {}).get("id")
                 text = msg.get("text", "").strip()
@@ -422,110 +251,49 @@ def main():
                 if not chat_id or not text:
                     continue
 
-                # RATE LIMIT (3 စက္ကန့်ခြားမှ မေးမြန်းနိုင်ရန်)
+                # Rate Limit
                 current_time = time.time()
-                last_time = user_last_msg_time.get(chat_id, 0)
-
-                if current_time - last_time < 3:
-                    send_message(
-                        chat_id,
-                        "⏳ ခဏလေးစောင့်ပြီးမှ ပြန်မေးပေးပါဦး ❤️"
-                    )
+                if current_time - user_last_msg_time.get(chat_id, 0) < 2:
+                    send_message(chat_id, "⏳ ခဏလေးစောင့်ပါဦး ❤️")
                     continue
-
                 user_last_msg_time[chat_id] = current_time
                 lower_text = text.lower()
 
-                # START COMMAND
+                # Start
                 if text == "/start":
-                    send_message(
-                        chat_id,
-                        """
-❤️ မင်္ဂလာပါ။ Lix AI V3.0 မှ ကြိုဆိုပါတယ်။
-ကျွန်တော်က Lix ပါ။
-
-အသုံးပြုနိုင်တဲ့ Features များ -
-💬 AI စကားပြောရန်
-စာတစ်ခုခု ရိုက်ပို့လိုက်ပါ။
-
-🎨 AI ပုံဆွဲရန်
-ပုံဆွဲပေးပါ ကြောင်လေးတစ်ကောင်
-
-🎵 သီချင်းရှာရန်
-သီချင်း Shape of You
-
-❤️ Lix AI V3.0
-"""
-                    )
+                    send_message(chat_id, "❤️ မင်္ဂလာပါ။ Lix AI V3.1 မှ ကြိုဆိုပါတယ်။ ပုံဆွဲရန်၊ သီချင်းရှာရန်နှင့် စကားပြောရန် အသင့်ဖြစ်နေပါပြီ။")
                     continue
 
-                # IMAGE GENERATION
-                if any(k in lower_text for k in ["ပုံဆွဲ", "draw", "image", "generate image"]):
+                # Image Generation
+                if any(k in lower_text for k in ["ပုံဆွဲ", "draw", "image", "generate"]):
                     send_typing(chat_id)
                     prompt = clean_image_prompt(text)
-
                     if not prompt:
-                        send_message(
-                            chat_id,
-                            "🎨 ဘယ်လိုပုံမျိုး ဆွဲပေးရမလဲ ပြောပြပါဦး။"
-                        )
+                        send_message(chat_id, "🎨 ဘယ်လိုပုံမျိုး ဆွဲပေးရမလဲ ပြောပြပါဦး။")
                         continue
-
-                    send_message(
-                        chat_id,
-                        "🎨 Lix AI က ပုံဖန်တီးနေပါတယ်။ ခဏစောင့်ပေးပါဦး ❤️"
-                    )
-
-                    image_data, content_type = generate_image(prompt)
-
+                    send_message(chat_id, "🎨 Lix AI က ပုံဖန်တီးနေပါတယ်။ ခဏစောင့်ပေးပါဦး ❤️")
+                    image_data, c_type = generate_image(prompt)
                     if image_data:
-                        success = send_photo(
-                            chat_id,
-                            image_data,
-                            content_type,
-                            "🎨 Lix AI Image Generator\n\n" + prompt
-                        )
-                        if not success:
-                            send_message(
-                                chat_id,
-                                "⚠️ ပုံဖန်တီးပြီးပါပြီ။ Telegram ကို ပို့ရာမှာ အမှားဖြစ်နေပါတယ်။"
-                            )
+                        send_photo(chat_id, image_data, c_type, "🎨 Lix AI Image Generator\n\n" + prompt)
                     else:
-                        send_message(
-                            chat_id,
-                            "⚠️ ပုံဆွဲမအောင်မြင်ပါ။\n\n" + str(content_type)[:2500]
-                        )
+                        send_message(chat_id, "⚠️ ပုံဆွဲမအောင်မြင်ပါ။ နောက်တစ်ကြိမ် ထပ်ကြိုးစားပါ။")
                     continue
 
-                # SONG SEARCH
+                # Song Search
                 if any(k in lower_text for k in ["သီချင်း", "song", "music"]):
                     send_typing(chat_id)
                     song_query = clean_song_name(text)
-
                     if not song_query:
-                        send_message(
-                            chat_id,
-                            "🎵 ဘယ်သီချင်းရှာပေးရမလဲ ပြောပြပါဦး။"
-                        )
+                        send_message(chat_id, "🎵 ဘယ်သီချင်းရှာပေးရမလဲ ပြောပြပါဦး။")
                         continue
-
                     song = search_song(song_query)
-
                     if song and song.get("preview"):
-                        success = send_audio(chat_id, song)
-                        if not success:
-                            send_message(
-                                chat_id,
-                                "⚠️ သီချင်းပို့လို့ မရသေးပါဘူး။"
-                            )
+                        send_audio(chat_id, song)
                     else:
-                        send_message(
-                            chat_id,
-                            "😔 သီချင်းရှာမတွေ့ပါဘူး။ နာမည်ပြန်စစ်ပေးပါဦး။"
-                        )
+                        send_message(chat_id, "😔 သီချင်းရှာမတွေ့ပါဘူး။ နာမည်ပြန်စစ်ပေးပါဦး။")
                     continue
 
-                # NORMAL AI CHAT
+                # Normal Chat
                 send_typing(chat_id)
                 answer = ask_ai(text)
                 send_message(chat_id, answer[:4000])
@@ -533,11 +301,6 @@ def main():
         except Exception as e:
             print("MAIN LOOP ERROR:", repr(e))
             time.sleep(5)
-
-
-# ==========================================
-# 11. START APPLICATION
-# ==========================================
 
 if __name__ == "__main__":
     keep_alive()
